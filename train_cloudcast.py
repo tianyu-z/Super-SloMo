@@ -14,6 +14,7 @@ from math import log10
 import datetime
 import numpy as np
 import warnings
+from skimage.measure import compare_psnr, compare_ssim
 
 warnings.simplefilter("ignore", UserWarning)
 # from tensorboardX import SummaryWriter
@@ -60,6 +61,9 @@ parser.add_argument(
     type=int,
     default=16,
     help="batch size for training. Default: 6.",
+)
+parser.add_argument(
+    "-nw", "--num_workers", default=4, type=int, help="number of CPU you get"
 )
 parser.add_argument(
     "--validation_batch_size",
@@ -154,7 +158,10 @@ trainset = dataloader.SuperSloMo(
     root=args.dataset_root + "/train", transform=transform, train=True
 )
 trainloader = torch.utils.data.DataLoader(
-    trainset, batch_size=args.train_batch_size, shuffle=True
+    trainset,
+    batch_size=args.train_batch_size,
+    num_workers=args.num_workers,
+    shuffle=True,
 )
 
 validationset = dataloader.SuperSloMo(
@@ -164,7 +171,10 @@ validationset = dataloader.SuperSloMo(
     train=False,
 )
 validationloader = torch.utils.data.DataLoader(
-    validationset, batch_size=args.validation_batch_size, shuffle=False
+    validationset,
+    batch_size=args.validation_batch_size,
+    num_workers=args.num_workers,
+    shuffle=False,
 )
 
 print(trainset, validationset)
@@ -301,8 +311,8 @@ def validate():
             # psnr
             MSE_val = MSE_LossFn(Ft_p, IFrame)
             psnr += 10 * log10(1 / MSE_val.item())
-
-    return (psnr / len(validationloader)), (tloss / len(validationloader)), retImg
+            ssim = compare_ssim(Ft_p, IFrame, multichannel=True, gaussian_weights=True)
+    return (psnr / len(validationloader)), ssim, (tloss / len(validationloader)), retImg
 
 
 ### Initialization
@@ -426,7 +436,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
         if (trainIndex % args.progress_iter) == args.progress_iter - 1:
             end = time.time()
 
-            psnr, vLoss, valImg = validate()
+            psnr, ssim, vLoss, valImg = validate()
 
             valPSNR[epoch].append(psnr)
             valLoss[epoch].append(vLoss)
@@ -448,7 +458,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
                 epoch=epoch,
             )
             comet_exp.log_metric("PSNR", psnr, step=itr, epoch=epoch)
-
+            comet_exp.log_metric("SSIM", ssim, step=itr, epoch=epoch)
             # valImage = torch.movedim(valImg, 0, -1)
             # print(type(valImage))
             # print(valImage.shape)
@@ -466,7 +476,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             endVal = time.time()
 
             print(
-                " Loss: %0.6f  Iterations: %4d/%4d  TrainExecTime: %0.1f  ValLoss:%0.6f  ValPSNR: %0.4f  ValEvalTime: %0.2f LearningRate: %f"
+                " Loss: %0.6f  Iterations: %4d/%4d  TrainExecTime: %0.1f  ValLoss:%0.6f  ValPSNR: %0.4f  ValSSIM: %0.4f  ValEvalTime: %0.2f LearningRate: %f"
                 % (
                     iLoss / args.progress_iter,
                     trainIndex,
@@ -474,6 +484,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
                     end - start,
                     vLoss,
                     psnr,
+                    ssim,
                     endVal - end,
                     get_lr(optimizer),
                 )
