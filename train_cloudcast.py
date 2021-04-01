@@ -14,21 +14,10 @@ from math import log10
 import datetime
 import numpy as np
 import warnings
-from skimage.measure import compare_psnr, compare_ssim
+from pytorch_msssim import ssim, ms_ssim, SSIM, MS_SSIM  # pip install pytorch-msssim
 
 warnings.simplefilter("ignore", UserWarning)
 # from tensorboardX import SummaryWriter
-
-
-random_seed = 2021
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
-if torch.cuda.device_count() > 1:
-    torch.cuda.manual_seed_all(random_seed)
-else:
-    torch.cuda.manual_seed(random_seed)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
 
 # For parsing commandline arguments
 parser = argparse.ArgumentParser()
@@ -108,9 +97,24 @@ parser.add_argument(
 parser.add_argument(
     "--nocomet", action="store_true", help="not using comet_ml logging."
 )
-
+parser.add_argument(
+    "-rs",
+    "--randomseed",
+    type=int,
+    default=2021,
+    help="batch size for validation. Default: 10.",
+)
 args = parser.parse_args()
 
+random_seed = args.randomseed
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
+if torch.cuda.device_count() > 1:
+    torch.cuda.manual_seed_all(random_seed)
+else:
+    torch.cuda.manual_seed(random_seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 # start logging info in comet-ml
 if not args.nocomet:
@@ -311,8 +315,13 @@ def validate():
             # psnr
             MSE_val = MSE_LossFn(Ft_p, IFrame)
             psnr += 10 * log10(1 / MSE_val.item())
-            ssim = compare_ssim(Ft_p, IFrame, multichannel=True, gaussian_weights=True)
-    return (psnr / len(validationloader)), ssim, (tloss / len(validationloader)), retImg
+            ssim_val = ssim(Ft_p, IFrame, data_range=1, size_average=True)
+    return (
+        (psnr / len(validationloader)),
+        ssim_val,
+        (tloss / len(validationloader)),
+        retImg,
+    )
 
 
 ### Initialization
@@ -436,7 +445,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
         if (trainIndex % args.progress_iter) == args.progress_iter - 1:
             end = time.time()
 
-            psnr, ssim, vLoss, valImg = validate()
+            psnr, ssim_val, vLoss, valImg = validate()
 
             valPSNR[epoch].append(psnr)
             valLoss[epoch].append(vLoss)
@@ -458,7 +467,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
                 epoch=epoch,
             )
             comet_exp.log_metric("PSNR", psnr, step=itr, epoch=epoch)
-            comet_exp.log_metric("SSIM", ssim, step=itr, epoch=epoch)
+            comet_exp.log_metric("SSIM", ssim_val, step=itr, epoch=epoch)
             # valImage = torch.movedim(valImg, 0, -1)
             # print(type(valImage))
             # print(valImage.shape)
@@ -484,7 +493,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
                     end - start,
                     vLoss,
                     psnr,
-                    ssim,
+                    ssim_val,
                     endVal - end,
                     get_lr(optimizer),
                 )
