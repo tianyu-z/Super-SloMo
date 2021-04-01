@@ -151,8 +151,8 @@ class SuperSloMo(data.Dataset):
         self,
         root,
         transform=None,
-        dim=(640, 360),
-        randomCropSize=(352, 352),
+        dim=(128, 128),
+        randomCropSize=(128, 128),
         train=True,
     ):
         """
@@ -165,9 +165,9 @@ class SuperSloMo(data.Dataset):
                 a sample and returns a transformed version.
                 E.g, ``transforms.RandomCrop`` for images.
             dim : tuple, optional
-                Dimensions of images in dataset. Default: (640, 360)
+                Dimensions of images in dataset. Default: (128, 128)
             randomCropSize : tuple, optional
-                Dimensions of random crop to be applied. Default: (352, 352)
+                Dimensions of random crop to be applied. Default: (128, 128)
             train : boolean, optional
                 Specifies if the dataset is for training or testing/validation.
                 `True` returns samples with data augmentation like random 

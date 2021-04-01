@@ -109,3 +109,10 @@ output.mp4
 
 # ignore folder
 tmpSuperSloMo/
+
+.jpg
+.mov
+.vscode/sftp.json.bak
+.gitignore
+.vscode/sftp.json
+Untitled.ipynb
