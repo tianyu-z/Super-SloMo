@@ -1,6 +1,6 @@
 # [Super SloMo]
 ##High Quality Estimation of Multiple Intermediate Frames for Video Interpolation
-from comet_ml import Experiment
+from comet_ml import Experiment, ExistingExperiment
 import argparse
 import torch
 import torchvision
@@ -98,6 +98,9 @@ parser.add_argument(
     "--nocomet", action="store_true", help="not using comet_ml logging."
 )
 parser.add_argument(
+    "--cometid", type=str, default="", help="the comet id to resume exps",
+)
+parser.add_argument(
     "-rs",
     "--randomseed",
     type=int,
@@ -116,12 +119,6 @@ else:
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-# start logging info in comet-ml
-if not args.nocomet:
-    comet_exp = Experiment(workspace=args.workspace, project_name=args.projectname)
-    # comet_exp.log_parameters(flatten_opts(args))
-else:
-    comet_exp = None
 
 ##[TensorboardX](https://github.com/lanpa/tensorboardX)
 ### For visualizing loss and interpolated frames
@@ -139,6 +136,26 @@ flowComp.to(device)
 ArbTimeFlowIntrp = model.UNet(20, 5)
 ArbTimeFlowIntrp.to(device)
 
+
+### Initialization
+
+
+if args.train_continue:
+    if not args.nocomet:
+        comet_exp = ExistingExperiment(previous_experiment=args.cometid)
+    else:
+        comet_exp = None
+    dict1 = torch.load(args.checkpoint)
+    ArbTimeFlowIntrp.load_state_dict(dict1["state_dictAT"])
+    flowComp.load_state_dict(dict1["state_dictFC"])
+else:
+    # start logging info in comet-ml
+    if not args.nocomet:
+        comet_exp = Experiment(workspace=args.workspace, project_name=args.projectname)
+        # comet_exp.log_parameters(flatten_opts(args))
+    else:
+        comet_exp = None
+    dict1 = {"loss": [], "valLoss": [], "valPSNR": [], "valSSIM": [], "epoch": -1}
 
 ###Initialze backward warpers for train and validation datasets
 
@@ -324,17 +341,6 @@ def validate():
     )
 
 
-### Initialization
-
-
-if args.train_continue:
-    dict1 = torch.load(args.checkpoint)
-    ArbTimeFlowIntrp.load_state_dict(dict1["state_dictAT"])
-    flowComp.load_state_dict(dict1["state_dictFC"])
-else:
-    dict1 = {"loss": [], "valLoss": [], "valPSNR": [], "epoch": -1}
-
-
 ### Training
 
 
@@ -344,6 +350,8 @@ start = time.time()
 cLoss = dict1["loss"]
 valLoss = dict1["valLoss"]
 valPSNR = dict1["valPSNR"]
+dict1["valSSIM"] = []
+valSSIM = dict1["valSSIM"]
 checkpoint_counter = 0
 
 ### Main training loop
@@ -354,6 +362,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
     cLoss.append([])
     valLoss.append([])
     valPSNR.append([])
+    valSSIM.append([])
     iLoss = 0
     if epoch > 0:
         # Increment scheduler count
@@ -448,8 +457,8 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             psnr, ssim_val, vLoss, valImg = validate()
 
             valPSNR[epoch].append(psnr)
+            valSSIM[epoch].append(ssim_val)
             valLoss[epoch].append(vLoss)
-
             # Tensorboard
             itr = int(trainIndex + epoch * (len(trainloader)))
 
@@ -515,6 +524,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             "loss": cLoss,
             "valLoss": valLoss,
             "valPSNR": valPSNR,
+            "valSSIM": valSSIM,
             "state_dictFC": flowComp.state_dict(),
             "state_dictAT": ArbTimeFlowIntrp.state_dict(),
         }
