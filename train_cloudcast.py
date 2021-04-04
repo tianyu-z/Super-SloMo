@@ -15,6 +15,9 @@ import datetime
 import numpy as np
 import warnings
 from pytorch_msssim import ssim, ms_ssim, SSIM, MS_SSIM  # pip install pytorch-msssim
+from PIL import Image
+import torchvision.utils as vutils
+
 
 warnings.simplefilter("ignore", UserWarning)
 # from tensorboardX import SummaryWriter
@@ -86,6 +89,12 @@ parser.add_argument(
 )
 parser.add_argument(
     "-wp", "--workspace", default="tianyu-z", type=str, help="comet-ml workspace"
+)
+parser.add_argument(
+    "-dh", "--data_h", default=128, type=int, help="H of the data shape"
+)
+parser.add_argument(
+    "-dw", "--data_w", default=128, type=int, help="W of the data shape"
 )
 parser.add_argument(
     "-pn",
@@ -217,6 +226,83 @@ def get_lr(optimizer):
         return param_group["lr"]
 
 
+def all_texts_to_array(texts, width=640, height=40):
+    """
+    Creates an array of texts, each of height and width specified
+    by the args, concatenated along their width dimension
+
+    Args:
+        texts (list(str)): List of texts to concatenate
+        width (int, optional): Individual text's width. Defaults to 640.
+        height (int, optional): Individual text's height. Defaults to 40.
+
+    Returns:
+        list: len(texts) text arrays with dims height x width x 3
+    """
+    return [text_to_array(text, width, height) for text in texts]
+
+
+def all_texts_to_tensors(texts, width=640, height=40):
+    """
+    Creates a list of tensors with texts from PIL images
+
+    Args:
+        texts (list(str)): texts to write
+        width (int, optional): width of individual texts. Defaults to 640.
+        height (int, optional): height of individual texts. Defaults to 40.
+
+    Returns:
+        list(torch.Tensor): len(texts) tensors 3 x height x width
+    """
+    arrays = all_texts_to_array(texts, width, height)
+    arrays = [array.transpose(2, 0, 1) for array in arrays]
+    return [torch.tensor(array) for array in arrays]
+
+
+def upload_images(
+    image_outputs, epoch, exp=None, im_per_row=4, rows_per_log=10, legends=[],
+):
+    """
+    Save output image
+
+    Args:
+        image_outputs (list(torch.Tensor)): all the images to log
+        im_per_row (int, optional): umber of images to be displayed per row.
+            Typically, for a given task: 3 because [input prediction, target].
+            Defaults to 3.
+        rows_per_log (int, optional): Number of rows (=samples) per uploaded image.
+            Defaults to 5.
+        comet_exp (comet_ml.Experiment, optional): experiment to use.
+            Defaults to None.
+    """
+    nb_per_log = im_per_row * rows_per_log
+    n_logs = len(image_outputs) // nb_per_log + 1
+
+    header = None
+    if len(legends) == im_per_row and all(isinstance(t, str) for t in legends):
+        header_width = max(im.shape[-1] for im in image_outputs)
+        headers = all_texts_to_tensors(legends, width=header_width)
+        header = torch.cat(headers, dim=-1)
+
+    for logidx in range(n_logs):
+        ims = image_outputs[logidx * nb_per_log : (logidx + 1) * nb_per_log]
+        if not ims:
+            continue
+        ims = torch.stack([im.squeeze() for im in ims]).squeeze()
+        image_grid = vutils.make_grid(
+            ims, nrow=im_per_row, normalize=True, scale_each=True, padding=0
+        )
+
+        if header is not None:
+            image_grid = torch.cat([header.to(image_grid.device), image_grid], dim=1)
+
+        image_grid = image_grid.permute(1, 2, 0).cpu().numpy()
+        exp.log_image(
+            Image.fromarray((image_grid * 255).astype(np.uint8)),
+            name=f"{str(epoch)}_#{logidx}",
+        )
+
+
 ###Loss and Optimizer
 
 
@@ -246,11 +332,12 @@ for param in vgg16_conv_4_3.parameters():
 #
 
 
-def validate():
+def validate(epoch, logimage=False):
     # For details see training.
     psnr = 0
     tloss = 0
     flag = 1
+    valid_images = []
     with torch.no_grad():
         for validationIndex, (validationData, validationFrameIndex) in enumerate(
             validationloader, 0
@@ -305,7 +392,32 @@ def validate():
                     padding=10,
                 )
                 flag = 0
-
+            if logimage:
+                if validationIndex % 150 == 0:
+                    valid_images.append(
+                        255.0
+                        * frame0[0]
+                        .resize_(1, 1, args.data_h, args.data_w)
+                        .repeat(1, 3, 1, 1)
+                    )
+                    valid_images.append(
+                        255.0
+                        * frameT[0]
+                        .resize_(1, 1, args.data_h, args.data_w)
+                        .repeat(1, 3, 1, 1)
+                    )
+                    valid_images.append(
+                        255.0
+                        * frame1[0]
+                        .resize_(1, 1, args.data_h, args.data_w)
+                        .repeat(1, 3, 1, 1)
+                    )
+                    valid_images.append(
+                        255.0
+                        * Ft_p.cpu()[0]
+                        .resize_(1, 1, args.data_h, args.data_w)
+                        .repeat(1, 3, 1, 1)
+                    )
             # loss
             recnLoss = L1_lossFn(Ft_p, IFrame)
 
@@ -333,6 +445,14 @@ def validate():
             MSE_val = MSE_LossFn(Ft_p, IFrame)
             psnr += 10 * log10(1 / MSE_val.item())
             ssim_val = ssim(Ft_p, IFrame, data_range=1, size_average=True)
+        if logimage:
+            upload_images(
+                valid_images,
+                epoch,
+                exp=comet_exp,
+                im_per_row=4,
+                rows_per_log=int(len(valid_images) / 4),
+            )
     return (
         (psnr / len(validationloader)),
         ssim_val,
@@ -364,10 +484,12 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
     valPSNR.append([])
     valSSIM.append([])
     iLoss = 0
-    if epoch > 0:
+    if epoch > dict1["epoch"] + 1:
         # Increment scheduler count
         scheduler.step()
-
+    # if epoch == dict1["epoch"] + 1:
+    #     # test if validate works
+    #     validate(epoch, True)
     for trainIndex, (trainData, trainFrameIndex) in enumerate(trainloader, 0):
 
         ## Getting the input and the target from the training set
@@ -454,10 +576,10 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
         if (trainIndex % args.progress_iter) == args.progress_iter - 1:
             end = time.time()
 
-            psnr, ssim_val, vLoss, valImg = validate()
+            psnr, ssim_val, vLoss, valImg = validate(epoch, logimage=True)
 
             valPSNR[epoch].append(psnr)
-            valSSIM[epoch].append(ssim_val)
+            valSSIM[epoch].append(ssim_val.item())
             valLoss[epoch].append(vLoss)
             # Tensorboard
             itr = int(trainIndex + epoch * (len(trainloader)))
@@ -476,7 +598,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
                 epoch=epoch,
             )
             comet_exp.log_metric("PSNR", psnr, step=itr, epoch=epoch)
-            comet_exp.log_metric("SSIM", ssim_val, step=itr, epoch=epoch)
+            comet_exp.log_metric("SSIM", ssim_val.item(), step=itr, epoch=epoch)
             # valImage = torch.movedim(valImg, 0, -1)
             # print(type(valImage))
             # print(valImage.shape)
@@ -502,7 +624,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
                     end - start,
                     vLoss,
                     psnr,
-                    ssim_val,
+                    ssim_val.item(),
                     endVal - end,
                     get_lr(optimizer),
                 )
