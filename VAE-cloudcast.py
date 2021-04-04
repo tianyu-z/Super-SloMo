@@ -85,6 +85,9 @@ parser.add_argument(
     help="If resuming from checkpoint, set to True and set `checkpoint` path. Default: False.",
 )
 parser.add_argument(
+    "--cometid", type=str, default="", help="the comet id to resume exps",
+)
+parser.add_argument(
     "-rs",
     "--randomseed",
     type=int,
@@ -374,6 +377,7 @@ if __name__ == "__main__":
         optimizer = optim.Adam(vae.parameters(), lr=args.lr)
         checkpoint_counter = 0
 
+    vae.to(device)
     transform = transforms.Compose([transforms.ToTensor()])
 
     CloudCasttrain = CloudCast(
@@ -411,60 +415,61 @@ if __name__ == "__main__":
         if epoch > dict1["epoch"] + 1:
             # Increment scheduler count
             scheduler.step()
-        if epoch == 0:  # test if validation works
-            # validate
-            valid_image_idxs = []
-            valid_images = []
-            with torch.no_grad():
-                for i, data in enumerate(CloudCasttrainloader, 0):
-                    inputs_, classes_ = data
-                    inputs_, classes_ = (
-                        Variable(inputs_.resize_(batch_size, input_dim)),
-                        Variable(classes_),
-                    )
-                    dec_ = vae(inputs_)
-                    ll_ = latent_loss(vae.z_mean, vae.z_sigma)
-                    loss_ = criterion(dec_, inputs_) + ll_
-                    l_ = loss_.item()
-                    loss_val += l_
-                    if i % interval_vaild == 0:
-                        valid_image_idxs.append(i)
-                        valid_images.append(
-                            255.0
-                            * inputs_[0]
-                            .resize_(1, 1, args.data_h, args.data_w)
-                            .repeat(1, 3, 1, 1)
-                        )
-                        valid_images.append(
-                            255.0
-                            * dec_[0]
-                            .resize_(1, 1, args.data_h, args.data_w)
-                            .repeat(1, 3, 1, 1)
-                        )
-            print(
-                "validloss: {:.6f},  epoch : {:02d}".format(
-                    loss_val / len(CloudCasttestloader), epoch
-                ),
-                end="\r",
-                flush=True,
-            )
-            dict2 = {
-                "epoch": epoch,
-                "learningRate": get_lr(optimizer),
-                "trainloss": loss_train,
-                "valloss": loss_val,
-            }
-            comet_exp.log_metrics(dict2, step=i, epoch=epoch)
-            upload_images(
-                valid_images,
-                epoch,
-                exp=comet_exp,
-                im_per_row=2,
-                rows_per_log=int(len(valid_images) / 2),
-            )
+        # if epoch == 0:  # test if validation works
+        #     # validate
+        #     valid_image_idxs = []
+        #     valid_images = []
+        #     with torch.no_grad():
+        #         for i, data in enumerate(CloudCasttrainloader, 0):
+        #             inputs_, classes_ = data
+        #             inputs_, classes_ = (
+        #                 Variable(inputs_.resize_(batch_size, input_dim)),
+        #                 Variable(classes_),
+        #             )
+        #             dec_ = vae(inputs_)
+        #             ll_ = latent_loss(vae.z_mean, vae.z_sigma)
+        #             loss_ = criterion(dec_, inputs_) + ll_
+        #             l_ = loss_.item()
+        #             loss_val += l_
+        #             if i % interval_vaild == 0:
+        #                 valid_image_idxs.append(i)
+        #                 valid_images.append(
+        #                     255.0
+        #                     * inputs_[0]
+        #                     .resize_(1, 1, args.data_h, args.data_w)
+        #                     .repeat(1, 3, 1, 1)
+        #                 )
+        #                 valid_images.append(
+        #                     255.0
+        #                     * dec_[0]
+        #                     .resize_(1, 1, args.data_h, args.data_w)
+        #                     .repeat(1, 3, 1, 1)
+        #                 )
+        #     print(
+        #         "validloss: {:.6f},  epoch : {:02d}".format(
+        #             loss_val / len(CloudCasttestloader), epoch
+        #         ),
+        #         end="\r",
+        #         flush=True,
+        #     )
+        #     dict2 = {
+        #         "epoch": epoch,
+        #         "learningRate": get_lr(optimizer),
+        #         "trainloss": loss_train,
+        #         "valloss": loss_val,
+        #     }
+        #     comet_exp.log_metrics(dict2, step=i, epoch=epoch)
+        #     upload_images(
+        #         valid_images,
+        #         epoch,
+        #         exp=comet_exp,
+        #         im_per_row=2,
+        #         rows_per_log=int(len(valid_images) / 2),
+        #     )
         # train
         for i, data in enumerate(CloudCasttrainloader, 0):
             inputs, classes = data
+            inputs, classes = inputs.to(device), classes.to(device)
             inputs, classes = (
                 Variable(inputs.resize_(batch_size, input_dim)),
                 Variable(classes),
@@ -490,6 +495,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             for i, data in enumerate(CloudCasttrainloader, 0):
                 inputs_, classes_ = data
+                inputs_, classes_ = inputs_.to(device), classes_.to(device)
                 inputs_, classes_ = (
                     Variable(inputs_.resize_(batch_size, input_dim)),
                     Variable(classes_),
@@ -523,10 +529,13 @@ if __name__ == "__main__":
         dict2 = {
             "epoch": epoch,
             "learningRate": get_lr(optimizer),
-            "trainloss": loss_train,
-            "valloss": loss_val,
+            "trainloss": loss_train / len(CloudCasttestloader),
+            "valloss": loss_val / len(CloudCasttestloader),
         }
-        comet_exp.log_metrics(dict2, step=i, epoch=epoch)
+        comet_exp.log_metric("epoch", dict2["epoch"], epoch=epoch)
+        comet_exp.log_metric("learningRate", dict2["learningRate"], epoch=epoch)
+        comet_exp.log_metric("trainloss", dict2["trainloss"], epoch=epoch)
+        comet_exp.log_metric("valloss", dict2["valloss"], epoch=epoch)
         upload_images(
             valid_images,
             epoch,
@@ -542,8 +551,8 @@ if __name__ == "__main__":
                 "trainBatchSz": batch_size,
                 "validationBatchSz": batch_size,
                 "learningRate": get_lr(optimizer),
-                "trainloss": loss_train,
-                "valloss": loss_val,
+                "trainloss": loss_train / len(CloudCasttestloader),
+                "valloss": loss_val / len(CloudCasttestloader),
                 "state_dict": vae.state_dict(),
                 "checkpoint_counter": checkpoint_counter,
             }
