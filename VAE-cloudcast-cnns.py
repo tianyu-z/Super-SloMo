@@ -18,12 +18,18 @@ import datetime
 # https://github.com/sksq96/pytorch-vae/blob/master/vae-cnn.ipynb
 parser = argparse.ArgumentParser()
 parser.add_argument("--epochs", default=100, type=int, help="sum of epochs")
-parser.add_argument("-bs", "--batchsize", default=16, type=int, help="mini-batch size")
+parser.add_argument(
+    "-bs", "--batchsize", default=16384, type=int, help="mini-batch size"
+)
 parser.add_argument(
     "-wp", "--workspace", default="tianyu-z", type=str, help="comet-ml workspace"
 )
 parser.add_argument(
-    "-nw", "--num_workers", default=4, type=int, help="number of CPU you get"
+    "-nw",
+    "--num_workers",
+    default=0,
+    type=int,
+    help="number of CPU you get, needs to be 0 when you have a super large batchsize (>1024)",
 )
 parser.add_argument(
     "-se", "--save_every", default=10, type=int, help="save for every x epoches"
