@@ -185,38 +185,17 @@ class VAE(nn.Module):
 
     def encode(self, x):
         h = self.encoder(x)
-        # print(h.shape)
         z, mu, logvar = self.bottleneck(h)
         return z, mu, logvar
 
     def decode(self, z):
         z = self.fc3(z)
-        # print("after fc3", z.shape)
         z = self.decoder(z)
-        # z = UnFlatten()(z)
-        # print("1: ", z.shape)
-        # z = nn.ConvTranspose2d(1024, 128, kernel_size=5, stride=2).cuda()(z)
-        # print("2: ", z.shape)
-        # z = nn.LeakyReLU(0.2, True).cuda()(z)
-        # z = nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2).cuda()(z)
-        # print("3: ", z.shape)
-        # z = nn.LeakyReLU(0.2, True).cuda()(z)
-        # z = nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2).cuda()(z)
-        # print("4: ", z.shape)
-        # z = nn.LeakyReLU(0.2, True).cuda()(z)
-        # z = nn.ConvTranspose2d(32, 16, kernel_size=6, stride=2).cuda()(z)
-        # print("5: ", z.shape)
-        # z = nn.LeakyReLU(0.2, True).cuda()(z)
-        # z = nn.ConvTranspose2d(16, 1, kernel_size=6, stride=2).cuda()(z)
-        # print("5: ", z.shape)
-        # z = nn.LeakyReLU(0.2, True).cuda()(z)
         return z
 
     def forward(self, x):
         z, mu, logvar = self.encode(x)
-        # print("before fc3", z.shape)
         z = self.decode(z)
-        # print(z.shape)
         return z, mu, logvar
 
 
