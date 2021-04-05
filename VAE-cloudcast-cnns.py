@@ -25,6 +25,14 @@ parser.add_argument(
     "-wp", "--workspace", default="tianyu-z", type=str, help="comet-ml workspace"
 )
 parser.add_argument(
+    "-it",
+    "--init_type",
+    default="kaiming",
+    type=str,
+    help="the name of an initialization method: normal | xavier | kaiming | orthogonal",
+)
+
+parser.add_argument(
     "-nw",
     "--num_workers",
     default=0,
@@ -467,7 +475,7 @@ if __name__ == "__main__":
 
     vae = VAE(image_channels=1, h_dim=1024, z_dim=128)
     vae = vae.to(device)
-    vae = init_net(vae, "kaiming")
+    vae = init_net(vae, args.init_type)
     if args.train_continue:
         if not args.nocomet:
             comet_exp = ExistingExperiment(previous_experiment=args.cometid)
