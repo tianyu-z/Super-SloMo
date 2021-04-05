@@ -19,7 +19,9 @@ import datetime
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--epochs", default=100, type=int, help="sum of epochs")
-parser.add_argument("-bs", "--batchsize", default=16, type=int, help="mini-batch size")
+parser.add_argument(
+    "-bs", "--batchsize", default=16384, type=int, help="mini-batch size"
+)
 parser.add_argument(
     "-wp", "--workspace", default="tianyu-z", type=str, help="comet-ml workspace"
 )
