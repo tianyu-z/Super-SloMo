@@ -280,6 +280,9 @@ class CloudCast(data.Dataset):
         return self.length
 
 
+# utils below
+
+
 def text_to_array(text, width=640, height=40):
     """
     Creates a numpy array of shape height x width x 3 with
@@ -386,6 +389,76 @@ def upload_images(
         )
 
 
+def init_weights(net, init_type="normal", init_gain=0.02, debug=False):
+    """Initialize network weights.
+
+    Parameters:
+        net (network)   -- network to be initialized
+        init_type (str) -- the name of an initialization method: normal | xavier | kaiming | orthogonal
+        init_gain (float)    -- scaling factor for normal, xavier and orthogonal.
+
+    We use 'normal' in the original pix2pix and CycleGAN paper. But xavier and kaiming might
+    work better for some applications. Feel free to try yourself.
+    """
+
+    def init_func(m):  # define the initialization function
+        classname = m.__class__.__name__
+        if hasattr(m, "weight") and (
+            classname.find("Conv") != -1 or classname.find("Linear") != -1
+        ):
+            if debug:
+                print(classname)
+            if init_type == "normal":
+                nn.init.normal_(m.weight.data, 0.0, init_gain)
+            elif init_type == "xavier":
+                nn.init.xavier_normal_(m.weight.data, gain=init_gain)
+            elif init_type == "kaiming":
+                nn.init.kaiming_normal_(m.weight.data, a=0, mode="fan_in")
+            elif init_type == "orthogonal":
+                nn.init.orthogonal_(m.weight.data, gain=init_gain)
+            else:
+                raise NotImplementedError(
+                    "initialization method [%s] is not implemented" % init_type
+                )
+            if hasattr(m, "bias") and m.bias is not None:
+                nn.init.constant_(m.bias.data, 0.0)
+        elif (
+            classname.find("BatchNorm2d") != -1
+        ):  # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
+            nn.init.normal_(m.weight.data, 1.0, init_gain)
+            nn.init.constant_(m.bias.data, 0.0)
+
+    net.apply(init_func)  # apply the initialization function <init_func>
+
+
+def init_net(
+    net,
+    init_type="normal",
+    init_gain=0.02,
+    gpu_ids=[],
+    debug=False,
+    initialize_weights=True,
+):
+    """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
+    Parameters:
+        net (network)      -- the network to be initialized
+        init_type (str)    -- the name of an initialization method: normal | xavier | kaiming | orthogonal
+        gain (float)       -- scaling factor for normal, xavier and orthogonal.
+        gpu_ids (int list) -- which GPUs the network runs on: e.g., 0,1,2
+
+    Return an initialized network.
+    """
+    if len(gpu_ids) > 0:
+        assert torch.cuda.is_available()
+        net.to(gpu_ids[0])
+        # if not amp:
+        # net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs for non-AMP training
+    if initialize_weights:
+        init_weights(net, init_type, init_gain=init_gain, debug=debug)
+        print("Model weights initialized!")
+    return net
+
+
 if __name__ == "__main__":
 
     input_dim = args.data_h * args.data_w
@@ -394,6 +467,7 @@ if __name__ == "__main__":
 
     vae = VAE(image_channels=1, h_dim=1024, z_dim=128)
     vae = vae.to(device)
+    vae = init_net(vae, "kaiming")
     if args.train_continue:
         if not args.nocomet:
             comet_exp = ExistingExperiment(previous_experiment=args.cometid)
