@@ -49,18 +49,20 @@ parser.add_argument(
     "--epochs", type=int, default=200, help="number of epochs to train. Default: 200."
 )
 parser.add_argument(
+    "-tbs",
     "--train_batch_size",
     type=int,
-    default=16,
+    default=384,
     help="batch size for training. Default: 6.",
 )
 parser.add_argument(
     "-nw", "--num_workers", default=4, type=int, help="number of CPU you get"
 )
 parser.add_argument(
+    "-vbs",
     "--validation_batch_size",
     type=int,
-    default=10,
+    default=384,
     help="batch size for validation. Default: 10.",
 )
 parser.add_argument(
@@ -80,6 +82,9 @@ parser.add_argument(
     type=int,
     default=100,
     help="frequency of reporting progress and validation. N: after every N iterations. Default: 100.",
+)
+parser.add_argument(
+    "--logimagefreq", type=int, default=1, help="frequency of logging image.",
 )
 parser.add_argument(
     "--checkpoint_epoch",
@@ -393,7 +398,7 @@ def validate(epoch, logimage=False):
                 )
                 flag = 0
             if logimage:
-                if validationIndex % 150 == 0:
+                if validationIndex % args.logimagefreq == 0:
                     valid_images.append(
                         255.0
                         * frame0[0]
@@ -573,66 +578,65 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
         iLoss += loss.item()
 
         # Validation and progress every `args.progress_iter` iterations
-        if (trainIndex % args.progress_iter) == args.progress_iter - 1:
-            end = time.time()
+        # if (trainIndex % args.progress_iter) == args.progress_iter - 1:
+    end = time.time()
 
-            psnr, ssim_val, vLoss, valImg = validate(epoch, logimage=True)
+    psnr, ssim_val, vLoss, valImg = validate(epoch, logimage=True)
 
-            valPSNR[epoch].append(psnr)
-            valSSIM[epoch].append(ssim_val.item())
-            valLoss[epoch].append(vLoss)
-            # Tensorboard
-            itr = int(trainIndex + epoch * (len(trainloader)))
+    valPSNR[epoch].append(psnr)
+    valSSIM[epoch].append(ssim_val.item())
+    valLoss[epoch].append(vLoss)
+    # Tensorboard
+    itr = int(trainIndex + epoch * (len(trainloader)))
 
-            # writer.add_scalars(
-            #     "Loss",
-            #     {"trainLoss": iLoss / args.progress_iter, "validationLoss": vLoss},
-            #     itr,
-            # )
-            # writer.add_scalar("PSNR", psnr, itr)
+    # writer.add_scalars(
+    #     "Loss",
+    #     {"trainLoss": iLoss / args.progress_iter, "validationLoss": vLoss},
+    #     itr,
+    # )
+    # writer.add_scalar("PSNR", psnr, itr)
 
-            # writer.add_image("Validation", valImg, itr)
-            comet_exp.log_metrics(
-                {"trainLoss": iLoss / args.progress_iter, "validationLoss": vLoss},
-                step=itr,
-                epoch=epoch,
-            )
-            comet_exp.log_metric("PSNR", psnr, step=itr, epoch=epoch)
-            comet_exp.log_metric("SSIM", ssim_val.item(), step=itr, epoch=epoch)
-            # valImage = torch.movedim(valImg, 0, -1)
-            # print(type(valImage))
-            # print(valImage.shape)
-            # print(valImage.max())
-            # print(valImage.min())
+    # writer.add_image("Validation", valImg, itr)
+    comet_exp.log_metrics(
+        {"trainLoss": iLoss / args.progress_iter, "validationLoss": vLoss},
+        step=itr,
+        epoch=epoch,
+    )
+    comet_exp.log_metric("PSNR", psnr, step=itr, epoch=epoch)
+    comet_exp.log_metric("SSIM", ssim_val.item(), step=itr, epoch=epoch)
+    # valImage = torch.movedim(valImg, 0, -1)
+    # print(type(valImage))
+    # print(valImage.shape)
+    # print(valImage.max())
+    # print(valImage.min())
 
-            # comet_exp.log_image(
-            #     valImage,
-            #     name="iter: " + str(iter) + ";epoch: " + str(epoch),
-            #     image_format="jpg",
-            #     step=itr,
-            # )
-            #####
+    # comet_exp.log_image(
+    #     valImage,
+    #     name="iter: " + str(iter) + ";epoch: " + str(epoch),
+    #     image_format="jpg",
+    #     step=itr,
+    # )
+    #####
 
-            endVal = time.time()
+    endVal = time.time()
 
-            print(
-                " Loss: %0.6f  Iterations: %4d/%4d  TrainExecTime: %0.1f  ValLoss:%0.6f  ValPSNR: %0.4f  ValSSIM: %0.4f  ValEvalTime: %0.2f LearningRate: %f"
-                % (
-                    iLoss / args.progress_iter,
-                    trainIndex,
-                    len(trainloader),
-                    end - start,
-                    vLoss,
-                    psnr,
-                    ssim_val.item(),
-                    endVal - end,
-                    get_lr(optimizer),
-                )
-            )
-
-            cLoss[epoch].append(iLoss / args.progress_iter)
-            iLoss = 0
-            start = time.time()
+    print(
+        " Loss: %0.6f  Iterations: %4d/%4d  TrainExecTime: %0.1f  ValLoss:%0.6f  ValPSNR: %0.4f  ValSSIM: %0.4f  ValEvalTime: %0.2f LearningRate: %f"
+        % (
+            iLoss / args.progress_iter,
+            trainIndex,
+            len(trainloader),
+            end - start,
+            vLoss,
+            psnr,
+            ssim_val.item(),
+            endVal - end,
+            get_lr(optimizer),
+        )
+    )
+    cLoss[epoch].append(iLoss / args.progress_iter)
+    iLoss = 0
+    start = time.time()
 
     # Create checkpoint after every `args.checkpoint_epoch` epochs
     if (epoch % args.checkpoint_epoch) == args.checkpoint_epoch - 1:
