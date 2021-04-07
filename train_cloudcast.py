@@ -48,7 +48,7 @@ parser.add_argument(
 parser.add_argument(
     "-it",
     "--init_type",
-    default="kaiming",
+    default="",
     type=str,
     help="the name of an initialization method: normal | xavier | kaiming | orthogonal",
 )
@@ -74,6 +74,7 @@ parser.add_argument(
     help="batch size for validation. Default: 10.",
 )
 parser.add_argument(
+    "-ilr",
     "--init_learning_rate",
     type=float,
     default=0.0001,
@@ -155,12 +156,14 @@ torch.backends.cudnn.benchmark = False
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 flowComp = model.UNet(6, 4)
 flowComp.to(device)
-init_net(flowComp, args.init_type)
-print(args.init_type + " initializing flowComp done")
+if args.init_type != "":
+    init_net(flowComp, args.init_type)
+    print(args.init_type + " initializing flowComp done")
 ArbTimeFlowIntrp = model.UNet(20, 5)
 ArbTimeFlowIntrp.to(device)
-init_net(ArbTimeFlowIntrp, args.init_type)
-print(args.init_type + " initializing ArbTimeFlowIntrp done")
+if args.init_type != "":
+    init_net(ArbTimeFlowIntrp, args.init_type)
+    print(args.init_type + " initializing ArbTimeFlowIntrp done")
 
 
 ### Initialization
@@ -264,7 +267,8 @@ scheduler = optim.lr_scheduler.MultiStepLR(
 vgg16 = torchvision.models.vgg16(pretrained=True)
 vgg16_conv_4_3 = nn.Sequential(*list(vgg16.children())[0][:22])
 vgg16_conv_4_3.to(device)
-init_net(vgg16_conv_4_3, args.init_type)
+if args.init_type != "":
+    init_net(vgg16_conv_4_3, args.init_type)
 for param in vgg16_conv_4_3.parameters():
     param.requires_grad = False
 
@@ -407,6 +411,8 @@ def validate(epoch, logimage=False):
 
 import time
 
+best_psnr = -1
+best_ssim = -1
 start = time.time()
 cLoss = dict1["loss"]
 valLoss = dict1["valLoss"]
@@ -595,3 +601,44 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             args.checkpoint_dir + "/SuperSloMo" + str(checkpoint_counter) + ".ckpt",
         )
         checkpoint_counter += 1
+    if psnr > best_psnr:
+        best_psnr = psnr
+        dict1 = {
+            "Detail": "End to end Super SloMo.",
+            "epoch": epoch,
+            "timestamp": datetime.datetime.now(),
+            "trainBatchSz": args.train_batch_size,
+            "validationBatchSz": args.validation_batch_size,
+            "learningRate": get_lr(optimizer),
+            "loss": cLoss,
+            "valLoss": valLoss,
+            "valPSNR": valPSNR,
+            "valSSIM": valSSIM,
+            "state_dictFC": flowComp.state_dict(),
+            "state_dictAT": ArbTimeFlowIntrp.state_dict(),
+        }
+        torch.save(
+            dict1, args.checkpoint_dir + "/SuperSloMo" + "bestpsnr_epoch" + ".ckpt",
+        )
+        print("New Best PSNR found and saved at " + str(epoch))
+    if ssim_val.item() > best_ssim:
+        best_ssim = ssim_val.item()
+        dict1 = {
+            "Detail": "End to end Super SloMo.",
+            "epoch": epoch,
+            "timestamp": datetime.datetime.now(),
+            "trainBatchSz": args.train_batch_size,
+            "validationBatchSz": args.validation_batch_size,
+            "learningRate": get_lr(optimizer),
+            "loss": cLoss,
+            "valLoss": valLoss,
+            "valPSNR": valPSNR,
+            "valSSIM": valSSIM,
+            "state_dictFC": flowComp.state_dict(),
+            "state_dictAT": ArbTimeFlowIntrp.state_dict(),
+        }
+        torch.save(
+            dict1, args.checkpoint_dir + "/SuperSloMo" + "bestssim_epoch" + ".ckpt",
+        )
+        print("New Best SSIM found and saved at " + str(epoch))
+
