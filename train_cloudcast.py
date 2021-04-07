@@ -626,8 +626,8 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             dict1, args.checkpoint_dir + "/SuperSloMo" + "bestpsnr_epoch" + ".ckpt",
         )
         print("New Best PSNR found and saved at " + str(epoch))
-    if valLoss < best_valloss:
-        best_valloss = valLoss
+    if vLoss < best_valloss:
+        best_valloss = vLoss
         dict1 = {
             "Detail": "End to end Super SloMo.",
             "epoch": epoch,
