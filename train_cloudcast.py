@@ -40,13 +40,8 @@ parser.add_argument(
     "--checkpoint", type=str, help="path of checkpoint for pretrained model"
 )
 parser.add_argument(
-    "--train_continue",
-    type=bool,
-    default=False,
-    help="If resuming from checkpoint, set to True and set `checkpoint` path. Default: False.",
+    "--train_continue", action="store_true", help="resuming from checkpoint."
 )
-
-
 parser.add_argument(
     "-it",
     "--init_type",
