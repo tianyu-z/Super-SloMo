@@ -45,6 +45,8 @@ parser.add_argument(
     default=False,
     help="If resuming from checkpoint, set to True and set `checkpoint` path. Default: False.",
 )
+
+
 parser.add_argument(
     "-it",
     "--init_type",
@@ -170,8 +172,10 @@ if args.init_type != "":
 
 
 if args.train_continue:
-    if not args.nocomet:
+    if not args.nocomet and args.cometid != "":
         comet_exp = ExistingExperiment(previous_experiment=args.cometid)
+    elif not args.nocomet and args.cometid == "":
+        comet_exp = Experiment(workspace=args.workspace, project_name=args.projectname)
     else:
         comet_exp = None
     dict1 = torch.load(args.checkpoint)
@@ -611,7 +615,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             "validationBatchSz": args.validation_batch_size,
             "learningRate": get_lr(optimizer),
             "loss": cLoss,
-            "valLoss": valLoss,
+            "valLoss":  ,
             "valPSNR": valPSNR,
             "valSSIM": valSSIM,
             "state_dictFC": flowComp.state_dict(),
