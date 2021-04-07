@@ -417,6 +417,7 @@ import time
 
 best_psnr = -1
 best_ssim = -1
+best_valloss = 9999
 start = time.time()
 cLoss = dict1["loss"]
 valLoss = dict1["valLoss"]
@@ -615,7 +616,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             "validationBatchSz": args.validation_batch_size,
             "learningRate": get_lr(optimizer),
             "loss": cLoss,
-            "valLoss":  ,
+            "valLoss": valLoss,
             "valPSNR": valPSNR,
             "valSSIM": valSSIM,
             "state_dictFC": flowComp.state_dict(),
@@ -625,6 +626,26 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             dict1, args.checkpoint_dir + "/SuperSloMo" + "bestpsnr_epoch" + ".ckpt",
         )
         print("New Best PSNR found and saved at " + str(epoch))
+    if valLoss < best_valloss:
+        best_valloss = valLoss
+        dict1 = {
+            "Detail": "End to end Super SloMo.",
+            "epoch": epoch,
+            "timestamp": datetime.datetime.now(),
+            "trainBatchSz": args.train_batch_size,
+            "validationBatchSz": args.validation_batch_size,
+            "learningRate": get_lr(optimizer),
+            "loss": cLoss,
+            "valLoss": valLoss,
+            "valPSNR": valPSNR,
+            "valSSIM": valSSIM,
+            "state_dictFC": flowComp.state_dict(),
+            "state_dictAT": ArbTimeFlowIntrp.state_dict(),
+        }
+        torch.save(
+            dict1, args.checkpoint_dir + "/SuperSloMo" + "bestvalloss_epoch" + ".ckpt",
+        )
+        print("New Best valloss found and saved at " + str(epoch))
     if ssim_val.item() > best_ssim:
         best_ssim = ssim_val.item()
         dict1 = {
