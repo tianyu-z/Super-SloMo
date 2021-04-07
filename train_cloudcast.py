@@ -176,6 +176,7 @@ if args.train_continue:
     dict1 = torch.load(args.checkpoint)
     ArbTimeFlowIntrp.load_state_dict(dict1["state_dictAT"])
     flowComp.load_state_dict(dict1["state_dictFC"])
+    print("Pretrained model loaded!")
 else:
     # start logging info in comet-ml
     if not args.nocomet:
@@ -417,7 +418,6 @@ start = time.time()
 cLoss = dict1["loss"]
 valLoss = dict1["valLoss"]
 valPSNR = dict1["valPSNR"]
-dict1["valSSIM"] = []
 valSSIM = dict1["valSSIM"]
 checkpoint_counter = 0
 
