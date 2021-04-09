@@ -280,6 +280,7 @@ for param in vgg16_conv_4_3.parameters():
 def validate(epoch, logimage=False):
     # For details see training.
     psnr = 0
+    ssim_val = 0
     tloss = 0
     flag = 1
     valid_images = []
@@ -389,7 +390,7 @@ def validate(epoch, logimage=False):
             # psnr
             MSE_val = MSE_LossFn(Ft_p, IFrame)
             psnr += 10 * log10(1 / MSE_val.item())
-            ssim_val = ssim(Ft_p, IFrame, data_range=1, size_average=True)
+            ssim_val += ssim(Ft_p, IFrame, data_range=1, size_average=True).item()
         if logimage:
             upload_images(
                 valid_images,
@@ -400,7 +401,7 @@ def validate(epoch, logimage=False):
             )
     return (
         (psnr / len(validationloader)),
-        ssim_val,
+        (ssim_val / len(validationloader)),
         (tloss / len(validationloader)),
         retImg,
     )
@@ -419,7 +420,7 @@ cLoss = dict1["loss"]
 valLoss = dict1["valLoss"]
 valPSNR = dict1["valPSNR"]
 valSSIM = dict1["valSSIM"]
-checkpoint_counter = 0
+checkpoint_counter = int((dict1["epoch"] + 1) / args.checkpoint_epoch)
 
 ### Main training loop
 for epoch in range(dict1["epoch"] + 1, args.epochs):
@@ -526,7 +527,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
     psnr, ssim_val, vLoss, valImg = validate(epoch, logimage=True)
 
     valPSNR[epoch].append(psnr)
-    valSSIM[epoch].append(ssim_val.item())
+    valSSIM[epoch].append(ssim_val)
     valLoss[epoch].append(vLoss)
     # Tensorboard
     itr = int(trainIndex + epoch * (len(trainloader)))
@@ -545,7 +546,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
         epoch=epoch,
     )
     comet_exp.log_metric("PSNR", psnr, step=itr, epoch=epoch)
-    comet_exp.log_metric("SSIM", ssim_val.item(), step=itr, epoch=epoch)
+    comet_exp.log_metric("SSIM", ssim_val, step=itr, epoch=epoch)
     # valImage = torch.movedim(valImg, 0, -1)
     # print(type(valImage))
     # print(valImage.shape)
@@ -571,7 +572,7 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             end - start,
             vLoss,
             psnr,
-            ssim_val.item(),
+            ssim_val,
             endVal - end,
             get_lr(optimizer),
         )
@@ -641,8 +642,8 @@ for epoch in range(dict1["epoch"] + 1, args.epochs):
             dict1, args.checkpoint_dir + "/SuperSloMo" + "bestvalloss_epoch" + ".ckpt",
         )
         print("New Best valloss found and saved at " + str(epoch))
-    if ssim_val.item() > best_ssim:
-        best_ssim = ssim_val.item()
+    if ssim_val > best_ssim:
+        best_ssim = ssim_val
         dict1 = {
             "Detail": "End to end Super SloMo.",
             "epoch": epoch,

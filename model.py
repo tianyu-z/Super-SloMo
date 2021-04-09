@@ -369,3 +369,72 @@ def getWarpCoeff(indices, device):
         torch.Tensor(C1)[None, None, None, :].permute(3, 0, 1, 2).to(device),
     )
 
+
+class all(nn.Module):
+    def __init__(self, inChannels, outChannels, H, W, device):
+        self.flowComp = UNet(6, 4)
+        self.ArbTimeFlowIntrp = UNet(20, 5)
+        self.trainFlowBackWarp = backWarp(H, W, device)
+        self.validationFlowBackWarp = backWarp(H, W, device)
+        self.device = device
+
+    def forward(self, x, pred_only=False, isTrain=True):
+        data, frameidx = x
+        I0, _, I1 = data
+        flowOut = flowComp(torch.cat((I0, I1), dim=1))
+        F_0_1 = flowOut[:, :2, :, :]
+        F_1_0 = flowOut[:, 2:, :, :]
+        fCoeff = getFlowCoeff(frameidx, self.device)
+        F_t_0 = fCoeff[0] * F_0_1 + fCoeff[1] * F_1_0
+        F_t_1 = fCoeff[2] * F_0_1 + fCoeff[3] * F_1_0
+        if isTrain:
+            g_I0_F_t_0 = self.trainFlowBackWarp(I0, F_t_0)
+            g_I1_F_t_1 = self.trainFlowBackWarp(I1, F_t_1)
+        else:
+            g_I0_F_t_0 = self.validationFlowBackWarp(I0, F_t_0)
+            g_I1_F_t_1 = self.validationFlowBackWarp(I1, F_t_1)
+        intrpOut = self.ArbTimeFlowIntrp(
+            torch.cat(
+                (I0, I1, F_0_1, F_1_0, F_t_1, F_t_0, g_I1_F_t_1, g_I0_F_t_0), dim=1
+            )
+        )
+        F_t_0_f = intrpOut[:, :2, :, :] + F_t_0
+        F_t_1_f = intrpOut[:, 2:4, :, :] + F_t_1
+        V_t_0 = torch.sigmoid(intrpOut[:, 4:5, :, :])
+        V_t_1 = 1 - V_t_0
+        if isTrain:
+            g_I0_F_t_0_f = self.trainFlowBackWarp(I0, F_t_0_f)
+            g_I1_F_t_1_f = self.trainFlowBackWarp(I1, F_t_1_f)
+        else:
+            g_I0_F_t_0_f = self.validationFlowBackWarp(I0, F_t_0_f)
+            g_I1_F_t_1_f = self.validationFlowBackWarp(I1, F_t_1_f)
+        wCoeff = getWarpCoeff(frameidx, self.device)
+        Ft_p = (wCoeff[0] * V_t_0 * g_I0_F_t_0_f + wCoeff[1] * V_t_1 * g_I1_F_t_1_f) / (
+            wCoeff[0] * V_t_0 + wCoeff[1] * V_t_1
+        )
+        if isTrain:
+            if pred_only:
+                return Ft_p
+            else:
+                return (
+                    Ft_p,
+                    g_I0_F_t_0,
+                    g_I1_F_t_1,
+                    self.trainFlowBackWarp(I0, F_1_0),
+                    self.trainFlowBackWarp(I1, F_0_1),
+                    F_1_0,
+                    F_0_1,
+                )
+        else:
+            if pred_only:
+                return Ft_p
+            else:
+                return (
+                    Ft_p,
+                    g_I0_F_t_0,
+                    g_I1_F_t_1,
+                    self.validationFlowBackWarp(I0, F_1_0),
+                    self.validationFlowBackWarp(I1, F_0_1),
+                    F_1_0,
+                    F_0_1,
+                )
