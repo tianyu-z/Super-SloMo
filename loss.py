@@ -8,11 +8,12 @@ from math import log10
 class supervisedLoss(nn.Module):
     def __init__(self):
         super().__init__()
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.vgg16_conv_4_3 = nn.Sequential(
             *list(torchvision.models.vgg16(pretrained=True).children())[0][:22]
-        )
-        self.L1_lossFn = nn.L1_lossFn
-        self.MSE_LossFn = nn.MSE_LossFn
+        ).to(self.device)
+        self.L1_lossFn = nn.L1Loss()
+        self.MSE_LossFn = nn.MSELoss()
         for param in self.vgg16_conv_4_3.parameters():
             param.requires_grad = False
 

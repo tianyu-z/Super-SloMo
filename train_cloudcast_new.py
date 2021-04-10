@@ -134,11 +134,11 @@ class Trainer:
         torch.backends.cudnn.benchmark = False
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.slomo = model.Slomo(self.args.H, self.args.W, self.device)
+        self.slomo = model.Slomo(self.args.data_h, self.args.data_w, self.device)
         self.slomo.to(self.device)
         if self.args.init_type != "":
             init_net(self.slomo, self.args.init_type)
-            print(self.args.init_type + " initializing slomo done")
+            print(self.args.init_type + " initializing slomo done!")
         if self.args.train_continue:
             if not self.args.nocomet and self.args.cometid != "":
                 self.comet_exp = ExistingExperiment(
@@ -179,6 +179,9 @@ class Trainer:
                 "trainBatchSz": self.args.train_batch_size,
                 "validationBatchSz": self.args.validation_batch_size,
             }
+            self.optimizer = optim.Adam(
+                self.slomo.parameters(), lr=self.args.init_learning_rate
+            )
         self.scheduler = optim.lr_scheduler.MultiStepLR(
             self.optimizer, milestones=self.args.milestones, gamma=0.1
         )
@@ -225,7 +228,11 @@ class Trainer:
     def train(self):
         for epoch in range(self.ckpt_dict["epoch"] + 1, self.args.epochs):
             print("Epoch: ", epoch)
-
+            if epoch == 0:  # test val
+                with torch.no_grad():
+                    val_psnr, val_ssim, val_mse, val_loss = self.run_epoch(
+                        epoch, self.validationloader, logimage=True, isTrain=False,
+                    )
             _, _, _, train_loss = self.run_epoch(
                 epoch, self.trainloader, logimage=False, isTrain=True,
             )

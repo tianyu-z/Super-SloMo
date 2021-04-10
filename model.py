@@ -372,6 +372,7 @@ def getWarpCoeff(indices, device):
 
 class Slomo(nn.Module):
     def __init__(self, H, W, device):
+        super(Slomo, self).__init__()
         self.flowComp = UNet(6, 4)
         self.ArbTimeFlowIntrp = UNet(20, 5)
         self.trainFlowBackWarp = backWarp(H, W, device)
