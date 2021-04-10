@@ -13,15 +13,19 @@ class supervisedLoss(nn.Module):
         )
         self.L1_lossFn = nn.L1_lossFn
         self.MSE_LossFn = nn.MSE_LossFn
+        for param in self.vgg16_conv_4_3.parameters():
+            param.requires_grad = False
 
     def __call__(
         self,
         Ft_p,
         IFrame,
+        I0,
+        I1,
         g_I0_F_t_0,
         g_I1_F_t_1,
-        valFlowBackWarp_I0_F_1_0_I_1,
-        valFlowBackWarp_I1_F_0_1_I_0,
+        valFlowBackWarp_I0_F_1_0,
+        valFlowBackWarp_I1_F_0_1,
         F_1_0,
         F_0_1,
     ):
@@ -32,8 +36,8 @@ class supervisedLoss(nn.Module):
         warpLoss = (
             self.L1_lossFn(g_I0_F_t_0, IFrame)
             + self.L1_lossFn(g_I1_F_t_1, IFrame)
-            + valFlowBackWarp_I0_F_1_0_I_1
-            + valFlowBackWarp_I1_F_0_1_I_0
+            + self.L1_lossFn(valFlowBackWarp_I0_F_1_0, I1)
+            + self.L1_lossFn(valFlowBackWarp_I1_F_0_1, I0)
         )
         loss_smooth = (
             torch.mean(torch.abs(F_1_0[:, :, :, :-1] - F_1_0[:, :, :, 1:]))

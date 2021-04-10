@@ -5,6 +5,11 @@ import torchvision.utils as vutils
 import torch.nn as nn
 
 
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group["lr"]
+
+
 def text_to_array(text, width=640, height=40):
     """
     Creates a numpy array of shape height x width x 3 with

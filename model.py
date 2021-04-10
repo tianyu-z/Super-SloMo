@@ -370,8 +370,8 @@ def getWarpCoeff(indices, device):
     )
 
 
-class all(nn.Module):
-    def __init__(self, inChannels, outChannels, H, W, device):
+class Slomo(nn.Module):
+    def __init__(self, H, W, device):
         self.flowComp = UNet(6, 4)
         self.ArbTimeFlowIntrp = UNet(20, 5)
         self.trainFlowBackWarp = backWarp(H, W, device)
@@ -380,8 +380,11 @@ class all(nn.Module):
 
     def forward(self, x, pred_only=False, isTrain=True):
         data, frameidx = x
-        I0, _, I1 = data
-        flowOut = flowComp(torch.cat((I0, I1), dim=1))
+        I0, IFrame, I1 = data
+        I0 = I0.to(self.device)
+        I1 = I1.to(self.device)
+        IFrame = IFrame.to(self.device)
+        flowOut = self.flowComp(torch.cat((I0, I1), dim=1))
         F_0_1 = flowOut[:, :2, :, :]
         F_1_0 = flowOut[:, 2:, :, :]
         fCoeff = getFlowCoeff(frameidx, self.device)
@@ -418,6 +421,9 @@ class all(nn.Module):
             else:
                 return (
                     Ft_p,
+                    I0,
+                    IFrame,
+                    I1,
                     g_I0_F_t_0,
                     g_I1_F_t_1,
                     self.trainFlowBackWarp(I0, F_1_0),
@@ -431,6 +437,9 @@ class all(nn.Module):
             else:
                 return (
                     Ft_p,
+                    I0,
+                    IFrame,
+                    I1,
                     g_I0_F_t_0,
                     g_I1_F_t_1,
                     self.validationFlowBackWarp(I0, F_1_0),
