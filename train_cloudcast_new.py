@@ -172,7 +172,6 @@ class Trainer:
                 "valLoss": {},
                 "valPSNR": {},
                 "valSSIM": {},
-                "valMSE": {},
                 "learningRate": {},
                 "epoch": -1,
                 "detail": "End to end Super SloMo.",
@@ -219,7 +218,6 @@ class Trainer:
             "valLoss": 99999999,
             "valPSNR": -1,
             "valSSIM": -1,
-            "valMSE": 99999999,
         }
         self.checkpoint_counter = int(
             (self.ckpt_dict["epoch"] + 1) / self.args.checkpoint_epoch
@@ -228,23 +226,19 @@ class Trainer:
     def train(self):
         for epoch in range(self.ckpt_dict["epoch"] + 1, self.args.epochs):
             print("Epoch: ", epoch)
-            if epoch == 0:  # test val
-                with torch.no_grad():
-                    val_psnr, val_ssim, val_mse, val_loss = self.run_epoch(
-                        epoch, self.validationloader, logimage=True, isTrain=False,
-                    )
-            _, _, _, train_loss = self.run_epoch(
+            print("Training epoch {}".format(epoch))
+            _, _, train_loss = self.run_epoch(
                 epoch, self.trainloader, logimage=False, isTrain=True,
             )
             with torch.no_grad():
-                val_psnr, val_ssim, val_mse, val_loss = self.run_epoch(
+                print("Validating epoch {}".format(epoch))
+                val_psnr, val_ssim, val_loss = self.run_epoch(
                     epoch, self.validationloader, logimage=True, isTrain=False,
                 )
             self.ckpt_dict["trainLoss"][str(epoch)] = train_loss
             self.ckpt_dict["valLoss"][str(epoch)] = val_loss
             self.ckpt_dict["valPSNR"][str(epoch)] = val_psnr
             self.ckpt_dict["valSSIM"][str(epoch)] = val_ssim
-            self.ckpt_dict["valMSE"][str(epoch)] = val_mse
             self.ckpt_dict["learningRate"][str(epoch)] = get_lr(self.optimizer)
             self.ckpt_dict["epoch"] = epoch
 
@@ -254,9 +248,9 @@ class Trainer:
 
     def save_best(self, current, best, epoch):
         save_best_done = False
-        for metric_name in ["valLoss", "valSSIM", "valPSNR", "valMSE"]:
+        for metric_name in ["valLoss", "valSSIM", "valPSNR"]:
             if not save_best_done:
-                if ("Loss" in metric_name) or ("MSE" in metric_name):
+                if "Loss" in metric_name:
                     if best[metric_name] > current[metric_name][str(epoch)]:
                         best[metric_name] = current[metric_name][str(epoch)]
                         self.save(metric_name)
@@ -300,12 +294,12 @@ class Trainer:
     def run_epoch(self, epoch, dataloader, logimage=False, isTrain=True):
         # For details see training.
         psnr_value = 0
-        MSE_value = 0
         ssim_value = 0
         loss_value = 0
         if not isTrain:
             valid_images = []
         for index, all_data in enumerate(dataloader, 0):
+            self.optimizer.zero_grad()
             (
                 Ft_p,
                 I0,
@@ -365,7 +359,6 @@ class Trainer:
             loss_value += loss.item()
 
             # metrics
-            MSE_value += nn.MSE_LossFn(Ft_p, IFrame).item()
             psnr_value += psnr(Ft_p, IFrame, outputTensor=False)
             ssim_value += ssim(Ft_p, IFrame, outputTensor=False)
 
@@ -379,9 +372,6 @@ class Trainer:
                 "SSIM", ssim_value / len(dataloader), step=itr, epoch=epoch
             )
             self.comet_exp.log_metric(
-                "MSE", MSE_value / len(dataloader), step=itr, epoch=epoch
-            )
-            self.comet_exp.log_metric(
                 name_loss, loss_value / len(dataloader), step=itr, epoch=epoch
             )
             if logimage:
@@ -393,20 +383,18 @@ class Trainer:
                     rows_per_log=int(len(valid_images) / 4),
                 )
         print(
-            " Loss: %0.6f  Iterations: %4d/%4d  ValPSNR: %0.4f  ValSSIM: %0.4f ValMSE: %0.4f"
+            " Loss: %0.6f  Iterations: %4d/%4d  ValPSNR: %0.4f  ValSSIM: %0.4f "
             % (
                 loss_value / len(dataloader),
                 index,
                 len(dataloader),
                 psnr_value / len(dataloader),
                 ssim_value / len(dataloader),
-                MSE_value / len(dataloader),
             )
         )
         return (
             (psnr_value / len(dataloader)),
             (ssim_value / len(dataloader)),
-            (MSE_value / len(dataloader)),
             (loss_value / len(dataloader)),
         )
 

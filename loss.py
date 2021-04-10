@@ -52,9 +52,9 @@ class supervisedLoss(nn.Module):
 
 def psnr(Ft_p, IFrame, outputTensor=False):
     if outputTensor:
-        return 10 * log10(1 / nn.MSE_LossFn(Ft_p, IFrame))
+        return 10 * log10(1 / nn.MSELoss()(Ft_p, IFrame))
     else:
-        return 10 * log10(1 / nn.MSE_LossFn(Ft_p, IFrame).item())
+        return 10 * log10(1 / nn.MSELoss()(Ft_p, IFrame).item())
 
 
 def ssim(Ft_p, IFrame, outputTensor=False):
