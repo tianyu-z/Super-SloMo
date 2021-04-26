@@ -448,3 +448,51 @@ class Slomo(nn.Module):
                     F_1_0,
                     F_0_1,
                 )
+
+
+class MLP(nn.Module):
+    def __init__(self, H_in, W_in, H1, H2, H_out, W_out):
+        super(MLP, self).__init__()
+        self.L_in = H_in * W_in
+        self.L_out = H_out * W_out
+        self.linear1 = torch.nn.Linear(self.L_in, H1)
+        self.bn1 = torch.nn.BatchNorm1d(3)
+        self.linear2 = torch.nn.Linear(H1, H2)
+        self.bn2 = torch.nn.BatchNorm1d(3)
+        self.linear3 = torch.nn.Linear(H2, self.L_out)
+        self.bn3 = torch.nn.BatchNorm1d(3)
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.bn1(x)
+        x = F.relu(x)
+        x = self.linear2(x)
+        x = self.bn2(x)
+        x = F.relu(x)
+        x = self.linear3(x)
+        x = self.bn3(x)
+        return x
+
+
+class Slomofc(nn.Module):
+    def __init__(self, H, W, device, pretrain_stage):
+        super(Slomofc, self).__init__()
+        self.slomo = Slomo(H, W, device)  # output of it is (bs, 3, H, W)
+        self.H = H
+        self.W = W
+        self.L = H * W
+        self.pretrain_stage = pretrain_stage
+        if self.pretrain_stage:
+            self.avgpool = torch.nn.AdaptiveAvgPool2d((int(H / 2), int(W / 2)))
+            self.mlp = MLP(int(H / 2), int(W / 2), int(self.L / 2), self.L, H, W)
+
+    def forward(self, x, pred_only=True, isTrain=True):
+        Ft_p = self.slomo(x, pred_only=pred_only, isTrain=isTrain)
+        if self.pretrain_stage:
+            Ft_p = self.avgpool(Ft_p)
+            bs, c, h, w = Ft_p.shape
+            z = Ft_p.reshape(bs, c, h * w)
+            z = self.mlp(z)
+            return z
+        else:
+            return Ft_p
